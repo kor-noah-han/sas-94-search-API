@@ -29,6 +29,8 @@ DEFAULT_RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
 DEFAULT_TERM_DICTIONARY = "data/config/sas-ko-en-terms.json"
 TOKEN_RE = re.compile(r"[0-9A-Za-z가-힣_#./-]{2,}")
 HANGUL_RE = re.compile(r"[가-힣]")
+PROC_RE = re.compile(r"\bproc\s+([a-z0-9_]+)\b", re.IGNORECASE)
+EN_KO_PARTICLE_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*)(은|는|이|가|을|를|와|과|도|로|으로|에|에서|의)\b")
 _RERANKER_CACHE: dict[str, TextCrossEncoder] = {}
 
 
@@ -98,6 +100,10 @@ def env_default(name: str, default: str | None = None) -> str | None:
     return os.environ.get(name, default)
 
 
+def normalize_query_text(text: str) -> str:
+    return EN_KO_PARTICLE_RE.sub(r"\1", text)
+
+
 def tokenize(text: str) -> list[str]:
     return [token.lower() for token in TOKEN_RE.findall(text)]
 
@@ -115,6 +121,7 @@ def load_term_dictionary(path_str: str) -> list[dict[str, object]]:
 
 
 def expand_query(query: str, config: RetrievalConfig) -> tuple[str, list[str]]:
+    query = normalize_query_text(query)
     if not config.enable_term_expansion or not has_hangul(query):
         return query, []
 
@@ -278,6 +285,7 @@ def retrieve_corpus_scan(query_text: str, config: RetrievalConfig) -> list[Retri
 
 
 def build_fts_match_query(query_text: str) -> str:
+    query_text = normalize_query_text(query_text)
     tokens = tokenize(query_text)
     if not tokens:
         return ""
@@ -366,6 +374,72 @@ def metadata_bonus(query_tokens: list[str], payload: dict[str, object]) -> float
     return bonus
 
 
+def extract_proc_names(text: str) -> list[str]:
+    return [match.group(1).lower() for match in PROC_RE.finditer(text)]
+
+
+def procedure_bonus(query: str, payload: dict[str, object]) -> float:
+    proc_names = extract_proc_names(query)
+    if not proc_names:
+        return 0.0
+
+    title = str(payload.get("title", "")).lower()
+    section_path = str(payload.get("section_path_text", "")).lower()
+    chapter_title = str(payload.get("chapter_title", "")).lower()
+    text_preview = str(payload.get("text", ""))[:1800].lower()
+    searchable = "\n".join([title, chapter_title, section_path, text_preview])
+
+    bonus = 0.0
+    for proc_name in proc_names:
+        exact_phrase = f"proc {proc_name}"
+        procedure_phrase = f"{proc_name} procedure"
+        if exact_phrase in searchable:
+            bonus += 1.8
+        if procedure_phrase in searchable:
+            bonus += 1.2
+        if proc_name in section_path:
+            bonus += 0.8
+        if proc_name in title or proc_name in chapter_title:
+            bonus += 0.5
+    return bonus
+
+
+def reference_penalty(payload: dict[str, object]) -> float:
+    section_path = str(payload.get("section_path_text", "")).lower()
+    title = str(payload.get("title", "")).lower()
+    text_preview = str(payload.get("text", ""))[:1200].lower()
+    combined = f"{title}\n{section_path}\n{text_preview}"
+
+    penalty = 0.0
+    low_signal_markers = [
+        "appendix",
+        "special sas data sets",
+        "ods tables",
+        "ods table",
+        "brief descriptions",
+        "procedure concepts",
+        "contents",
+        "index",
+    ]
+    for marker in low_signal_markers:
+        if marker in combined:
+            penalty += 0.45
+
+    if "table " in text_preview or "table." in text_preview:
+        penalty += 0.25
+    if "ods table" in text_preview or "ods tables produced" in text_preview:
+        penalty += 0.8
+    proc_mentions = len(set(extract_proc_names(text_preview)))
+    if proc_mentions >= 4:
+        penalty += 0.7
+    elif proc_mentions >= 2:
+        penalty += 0.35
+
+    if "examples:" in combined:
+        penalty += 0.15
+    return penalty
+
+
 def lexical_post_score(query: str, base_score: float, payload: dict[str, object]) -> float:
     query_tokens = tokenize(query)
     section_path = str(payload.get("section_path_text", "")).lower()
@@ -391,6 +465,8 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
         score += 0.75
     if "macro" in phrase and "macro" in section_path:
         score += 0.75
+    score += procedure_bonus(query, payload)
+    score -= reference_penalty(payload)
     return score
 
 
@@ -429,6 +505,8 @@ def fuse_hits(
         if hit.lexical_rank is not None:
             score += config.lexical_weight / (config.rrf_k + hit.lexical_rank)
         score += metadata_bonus(query_tokens, hit.payload)
+        score += procedure_bonus(query, hit.payload) * 0.08
+        score -= reference_penalty(hit.payload) * 0.05
         hit.fused_score = score
         fused.append(hit)
 
@@ -501,6 +579,7 @@ def retrieve_hybrid(query: str, config: RetrievalConfig) -> RetrievalResult:
     lexical_hits: list[RetrievedChunk] = []
     dense_error: str | None = None
     lexical_error: str | None = None
+    query = normalize_query_text(query)
     query_text, expanded_terms = expand_query(query, config)
 
     if config.enable_dense:
