@@ -83,6 +83,26 @@ result = run_search("PROC MEANS syntax", RetrievalConfig(qdrant_url="http://loca
 print(result.retrieval["hits"][0]["section_path_text"])
 ```
 
+## 데이터 릴리스
+
+코드 패키지와 검색 데이터는 분리한다. 실제 검색을 하려면 아래 런타임 데이터가 필요하다.
+
+- `data/processed/sas-rag/search/sas9-pdf-fts.db`
+- `data/processed/sas-rag/corpus/sas9-pdf-corpus.jsonl`
+- `data/qdrant/sas9_pdf/meta.json`
+- `data/qdrant/sas9_pdf/collection/sas9_pdf_chunks/storage.sqlite`
+- `data/config/sas-ko-en-terms.json`
+
+릴리스 번들 생성:
+
+```bash
+python3 scripts/release/build_search_data_bundle.py \
+  --source-root /path/to/sas9-RAG \
+  --output-dir dist
+```
+
+이 명령은 `dist/sas94-search-data-YYYYMMDD.tar.gz` 와 `.sha256` 파일을 만든다. 생성된 압축 파일은 GitHub Release asset으로 올리는 용도다.
+
 호출 예시:
 
 ```bash

@@ -3,5 +3,6 @@ __pycache__/
 .env
 .venv/
 *.egg-info/
+dist/
 data/processed/
 data/qdrant/
