@@ -80,8 +80,8 @@ class RetrievalConfig:
     enable_term_expansion: bool = True
     rerank_model: str = DEFAULT_RERANK_MODEL
     rerank_limit: int = 12
-    dense_weight: float = 1.6
-    lexical_weight: float = 0.6
+    dense_weight: float = 0.8
+    lexical_weight: float = 1.2
     rrf_k: int = 60
 
 
