@@ -1,0 +1,66 @@
+[
+  {
+    "match": ["라이브러리 할당", "라이브러리 지정", "라이브러리 연결"],
+    "expand": ["assign library", "LIBNAME statement", "libref", "SAS library"]
+  },
+  {
+    "match": ["라이브러리", "라이브러리를"],
+    "expand": ["library", "SAS library", "libref", "LIBNAME"]
+  },
+  {
+    "match": ["리브레프", "libref"],
+    "expand": ["libref", "library reference"]
+  },
+  {
+    "match": ["매크로 변수", "매크로변수"],
+    "expand": ["macro variable", "%LET", "%LET statement", "automatic macro variable", "user-generated macro variable"]
+  },
+  {
+    "match": ["매크로 변수 정의", "매크로 변수 선언"],
+    "expand": ["macro variable", "user-generated macro variable", "%LET statement", "define macro variable"]
+  },
+  {
+    "match": ["자동 매크로 변수"],
+    "expand": ["automatic macro variable", "SYSLIBRC", "SYSJOBID"]
+  },
+  {
+    "match": ["매크로 정의", "매크로 만들기", "매크로 생성"],
+    "expand": ["macro definition", "%MACRO", "%MEND", "define macro"]
+  },
+  {
+    "match": ["매크로", "macro"],
+    "expand": ["macro", "%MACRO", "%MEND"]
+  },
+  {
+    "match": ["프로시저 평균", "평균 프로시저", "평균 구하기"],
+    "expand": ["PROC MEANS", "MEANS Procedure", "descriptive statistics"]
+  },
+  {
+    "match": ["평균"],
+    "expand": ["mean", "PROC MEANS", "MEANS Procedure"]
+  },
+  {
+    "match": ["회귀", "회귀분석"],
+    "expand": ["PROC REG", "REG Procedure", "regression"]
+  },
+  {
+    "match": ["시계열", "시계열 분석"],
+    "expand": ["time series", "PROC ARIMA", "ARIMA Procedure"]
+  },
+  {
+    "match": ["iml"],
+    "expand": ["PROC IML", "IML"]
+  },
+  {
+    "match": ["데이터셋", "데이터 세트"],
+    "expand": ["data set", "SAS data set"]
+  },
+  {
+    "match": ["옵션"],
+    "expand": ["option", "statement option", "system option"]
+  },
+  {
+    "match": ["문법", "구문"],
+    "expand": ["syntax", "statement syntax"]
+  }
+]
