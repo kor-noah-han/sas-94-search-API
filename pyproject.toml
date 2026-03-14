@@ -13,15 +13,10 @@ dependencies = [
 ]
 
 [project.scripts]
-sas94-search-api = "sas_rag.search_api:serve_search_api"
-sas94-search = "scripts.app.search_sas_qdrant:main"
-sas94-search-benchmark = "scripts.app.benchmark_sas_retrieval:main"
-sas94-build-fts = "scripts.index.build_sas_fts_index:main"
-sas94-index-qdrant = "scripts.index.index_sas_qdrant:main"
+sas94-search-api = "sas94_search_api.search_api:serve_search_api"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["sas_rag*", "scripts*"]
-
+include = ["sas94_search_api*"]
