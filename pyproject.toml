@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 sas94-search-api = "sas94_search_api.search_api:serve_search_api"
+sas94-search-data = "sas94_search_api.data_release:main"
 
 [tool.setuptools]
 include-package-data = true

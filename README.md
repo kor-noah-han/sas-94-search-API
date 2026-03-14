@@ -62,6 +62,12 @@ pip install .
 pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@main"
 ```
 
+설치 후 런타임 데이터 받기:
+
+```bash
+sas94-search-data --output-dir .
+```
+
 환경 변수 예시는 [`.env.example`](/Users/noahhan/dev/sas-94-search-API/.env.example#L1) 에 있다.
 
 ## 실행 방법
@@ -102,6 +108,18 @@ python3 scripts/release/build_search_data_bundle.py \
 ```
 
 이 명령은 `dist/sas94-search-data-YYYYMMDD.tar.gz` 와 `.sha256` 파일을 만든다. 생성된 압축 파일은 GitHub Release asset으로 올리는 용도다.
+
+릴리스 번들 다운로드와 압축 해제:
+
+```bash
+sas94-search-data --output-dir .
+```
+
+특정 태그를 지정하려면:
+
+```bash
+sas94-search-data --tag search-data-20260314 --output-dir .
+```
 
 호출 예시:
 
