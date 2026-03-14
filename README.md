@@ -61,19 +61,29 @@ SAS 9.4 문서 검색 전용 API 저장소다. 이 저장소는 `retrieval-only`
     └── manifests/
 ```
 
-## 실행 방법
+## 설치 방법
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
+
+또는 다른 시스템에서 바로:
+
+```bash
+pip install "git+https://github.com/kor-noah-han/sas-94-search-API.git"
+```
+
+환경 변수 예시는 [`.env.example`](/Users/noahhan/dev/sas-94-search-API/.env.example#L1) 에 있다.
+
+## 실행 방법
 
 Qdrant 서버가 있다면:
 
 ```bash
 export QDRANT_URL=http://localhost:6333
-python3 scripts/serve_sas_search_api.py --url http://localhost:6333 --port 8788
+sas94-search-api --url http://localhost:6333 --port 8788
 ```
 
 호출 예시:
@@ -84,6 +94,16 @@ curl -s -X POST http://127.0.0.1:8788/api/search \
   -d '{"query":"PROC MEANS syntax","mode":"hybrid","top_k":3}'
 ```
 
+CLI 예시:
+
+```bash
+sas94-search "PROC MEANS syntax" --url http://localhost:6333 --top-k 3 --show-debug
+```
+
+```bash
+sas94-search-benchmark --queries data/eval/sas-rag-ko-smoke.jsonl --url http://localhost:6333 --mode hybrid
+```
+
 ## 재사용 방식
 
 - 다른 시스템이 코드를 가져가 직접 실행할 수 있다.
@@ -92,4 +112,3 @@ curl -s -X POST http://127.0.0.1:8788/api/search \
 ## 주의
 
 이 저장소만으로는 대용량 corpus/FTS/Qdrant 데이터가 자동 포함되지 않는다. 실제 검색 품질을 내려면 기존 빌드 산출물을 별도로 복사하거나, corpus와 인덱스를 다시 생성해야 한다.
-

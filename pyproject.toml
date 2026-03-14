@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sas-94-search-api"
+version = "0.1.0"
+description = "Retrieval-only SAS 9.4 search API and Python package."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "qdrant-client[fastembed]>=1.17.1",
+]
+
+[project.scripts]
+sas94-search-api = "sas_rag.search_api:serve_search_api"
+sas94-search = "scripts.app.search_sas_qdrant:main"
+sas94-search-benchmark = "scripts.app.benchmark_sas_retrieval:main"
+sas94-build-fts = "scripts.index.build_sas_fts_index:main"
+sas94-index-qdrant = "scripts.index.index_sas_qdrant:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["sas_rag*", "scripts*"]
+
