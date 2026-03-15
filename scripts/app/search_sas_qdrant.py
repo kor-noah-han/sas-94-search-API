@@ -6,8 +6,8 @@ import json
 
 from scripts import _bootstrap  # noqa: F401
 
-from sas_rag.app import add_retrieval_args, build_retrieval_config, print_hits, retrieval_debug_dict
-from sas_rag.retrieval import load_dotenv, retrieve_hybrid
+from sas94_search_api.app import add_retrieval_args, build_retrieval_config, print_hits, retrieval_debug_dict
+from sas94_search_api.retrieval import load_dotenv, retrieve_hybrid
 
 
 def parse_args() -> argparse.Namespace:

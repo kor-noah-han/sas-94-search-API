@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from scripts import _bootstrap  # noqa: F401
 
-from sas_rag.search_api import serve_search_api
+from sas94_search_api.search_api import serve_search_api
 
 
 def main() -> int:
@@ -12,4 +12,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

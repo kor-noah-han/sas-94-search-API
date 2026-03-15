@@ -11,7 +11,7 @@ from typing import Iterable
 from scripts import _bootstrap  # noqa: F401
 from qdrant_client import QdrantClient, models
 
-from sas_rag.retrieval import (
+from sas94_search_api.retrieval import (
     DEFAULT_COLLECTION,
     DEFAULT_CORPUS_PATH,
     DEFAULT_EMBEDDING_MODEL,

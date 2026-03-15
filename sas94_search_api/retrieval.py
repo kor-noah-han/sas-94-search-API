@@ -126,9 +126,11 @@ class RetrievalConfig:
     lexical_limit: int = 16
     docsets: tuple[str, ...] = ()
     section_kinds: tuple[str, ...] = ()
-    enable_dense: bool = True
+    # Package defaults should match the published runtime bundle, which is
+    # lexical-first and does not ship a local Qdrant collection by default.
+    enable_dense: bool = False
     enable_lexical: bool = True
-    enable_rerank: bool = True
+    enable_rerank: bool = False
     enable_term_expansion: bool = True
     rerank_model: str = DEFAULT_RERANK_MODEL
     rerank_limit: int = 8

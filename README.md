@@ -72,6 +72,8 @@ sas94-search-data --output-dir .
 
 ## 실행 방법
 
+기본 release bundle은 `lexical-first`로 바로 사용할 수 있다. local Qdrant 파일은 기본 포함되지 않는다.
+
 Qdrant 서버가 있다면:
 
 ```bash
@@ -91,19 +93,20 @@ print(result.retrieval["hits"][0]["section_path_text"])
 
 ## 데이터 릴리스
 
-코드 패키지와 검색 데이터는 분리한다. 실제 검색을 하려면 아래 런타임 데이터가 필요하다.
+코드 패키지와 검색 데이터는 분리한다. 현재 기본 release bundle에 포함되는 런타임 데이터는 아래와 같다.
 
 - `data/processed/sas-rag/search/sas9-pdf-fts.db`
 - `data/processed/sas-rag/corpus/sas9-pdf-corpus.jsonl`
-- `data/qdrant/sas9_pdf/meta.json`
-- `data/qdrant/sas9_pdf/collection/sas9_pdf_chunks/storage.sqlite`
+- `data/processed/sas-rag/search/sas9-pdf-route-index.json`
 - `data/config/sas-ko-en-terms.json`
+
+local Qdrant 파일은 기본 bundle에 포함되지 않는다. dense/local mode까지 함께 배포하려면 `--include-local-qdrant` 옵션으로 번들을 다시 만들어야 한다.
 
 릴리스 번들 생성:
 
 ```bash
 python3 scripts/release/build_search_data_bundle.py \
-  --source-root /path/to/sas9-RAG \
+  --source-root /path/to/sas94-rag-chat \
   --output-dir dist
 ```
 
@@ -118,7 +121,7 @@ sas94-search-data --output-dir .
 특정 태그를 지정하려면:
 
 ```bash
-sas94-search-data --tag search-data-20260314 --output-dir .
+sas94-search-data --tag search-data-20260315-sas94only --output-dir .
 ```
 
 호출 예시:

@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from scripts import _bootstrap  # noqa: F401
-from sas_rag.retrieval import DEFAULT_CORPUS_PATH, DEFAULT_FTS_DB_PATH
+from sas94_search_api.retrieval import DEFAULT_CORPUS_PATH, DEFAULT_FTS_DB_PATH
 
 
 def parse_args() -> argparse.Namespace:

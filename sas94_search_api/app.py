@@ -33,9 +33,9 @@ def add_retrieval_args(
     parser.add_argument(
         "--qdrant-path",
         default=env_default("QDRANT_PATH", DEFAULT_QDRANT_PATH),
-        help="Local Qdrant storage path.",
+        help="Optional local Qdrant storage path for dense/local mode.",
     )
-    parser.add_argument("--url", default=env_default("QDRANT_URL"), help="Remote Qdrant URL.")
+    parser.add_argument("--url", default=env_default("QDRANT_URL"), help="Remote Qdrant URL for server mode.")
     parser.add_argument("--api-key", default=env_default("QDRANT_API_KEY"), help="Qdrant API key for remote mode.")
     parser.add_argument(
         "--embedding-model",
@@ -52,8 +52,8 @@ def add_retrieval_args(
     parser.add_argument(
         "--mode",
         choices=["dense", "lexical", "hybrid"],
-        default="hybrid",
-        help="Retrieval mode.",
+        default="lexical",
+        help="Retrieval mode. The default release bundle is lexical-first.",
     )
     parser.add_argument(
         "--rerank-model",
