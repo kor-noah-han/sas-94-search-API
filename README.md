@@ -39,9 +39,16 @@ SAS 9.4 문서 검색 전용 API 저장소다. 이 저장소는 `retrieval-only`
 ├── sas94_search_api/
 │   ├── __init__.py
 │   ├── app.py
+│   ├── logging_utils.py
+│   ├── rerank.py
 │   ├── retrieval.py
+│   ├── retrieval_models.py
+│   ├── route_index.py
+│   ├── scoring.py
 │   ├── search_api.py
-│   └── search_service.py
+│   ├── search_service.py
+│   ├── storage.py
+│   └── text_utils.py
 └── data/
     ├── config/
     ├── eval/
@@ -59,7 +66,7 @@ pip install .
 또는 다른 시스템에서 바로:
 
 ```bash
-pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@v0.1.1"
+pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@v0.1.2"
 ```
 
 설치 후 런타임 데이터 받기:
@@ -121,7 +128,7 @@ sas94-search-data --output-dir .
 특정 태그를 지정하려면:
 
 ```bash
-sas94-search-data --tag search-data-20260315-sas94only --output-dir .
+sas94-search-data --tag search-data-20260315-v0.1.2 --output-dir .
 ```
 
 호출 예시:
@@ -136,6 +143,23 @@ curl -s -X POST http://127.0.0.1:8788/api/search \
 
 - 다른 시스템이 이 패키지를 import해서 직접 사용할 수 있다.
 - 또는 이 저장소로 서버를 띄운 뒤 다른 시스템은 HTTP API만 호출하면 된다.
+
+## 내부 구조
+
+- `retrieval.py`
+  - retrieval orchestration only
+- `retrieval_models.py`
+  - 상수와 dataclass
+- `text_utils.py`
+  - query normalization, tokenization, term expansion
+- `route_index.py`
+  - route index loading and section routing
+- `storage.py`
+  - Qdrant / SQLite FTS access
+- `scoring.py`
+  - lexical/hybrid scoring rules
+- `rerank.py`
+  - optional reranker integration
 
 ## 주의
 

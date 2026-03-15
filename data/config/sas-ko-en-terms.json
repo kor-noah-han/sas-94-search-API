@@ -44,6 +44,42 @@
     "expand": ["PROC REG", "REG Procedure", "regression"]
   },
   {
+    "match": ["상관", "상관 분석", "상관분석", "상관계수"],
+    "expand": ["PROC CORR", "CORR Procedure", "correlation", "Pearson correlation", "Spearman correlation"]
+  },
+  {
+    "match": ["분산 분석", "분산분석", "anova"],
+    "expand": ["ANOVA", "PROC ANOVA", "PROC GLM", "analysis of variance"]
+  },
+  {
+    "match": ["빈도 분석", "빈도분석", "교차표", "교차 분석"],
+    "expand": ["PROC FREQ", "FREQ Procedure", "frequency tables", "crosstabulation"]
+  },
+  {
+    "match": ["기술 통계", "기술통계", "요약 통계", "기초 통계"],
+    "expand": ["descriptive statistics", "PROC MEANS", "PROC SUMMARY", "SUMMARY Procedure"]
+  },
+  {
+    "match": ["표준편차", "분산"],
+    "expand": ["standard deviation", "variance", "PROC MEANS", "PROC SUMMARY"]
+  },
+  {
+    "match": ["중앙값", "사분위수", "백분위수"],
+    "expand": ["median", "quartiles", "percentiles", "PROC MEANS", "PROC UNIVARIATE"]
+  },
+  {
+    "match": ["정규성 검정", "정규성", "분포 분석", "분포 확인"],
+    "expand": ["PROC UNIVARIATE", "UNIVARIATE Procedure", "normality test", "distribution analysis"]
+  },
+  {
+    "match": ["t 검정", "t검정"],
+    "expand": ["PROC TTEST", "TTEST Procedure", "t test"]
+  },
+  {
+    "match": ["카이제곱", "카이 제곱", "chi-square"],
+    "expand": ["chi-square", "PROC FREQ", "CHISQ option"]
+  },
+  {
     "match": ["시계열", "시계열 분석"],
     "expand": ["time series", "PROC ARIMA", "ARIMA Procedure"]
   },

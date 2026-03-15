@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 
 from sas94_search_api.app import retrieval_response_dict
+from sas94_search_api.logging_utils import get_logger
 from sas94_search_api.retrieval import RetrievalConfig, RetrievalResult, retrieve_hybrid
+
+LOGGER = get_logger(__name__)
 
 
 @dataclass
@@ -60,7 +64,15 @@ def _cached_result(query: str, config_key: str) -> RetrievalResult:
 
 
 def run_search(query: str, config: RetrievalConfig) -> SearchServiceResponse:
+    started = time.perf_counter()
     result = copy.deepcopy(_cached_result(query, _config_cache_key(config)))
+    LOGGER.info(
+        "search_complete mode=%s hits=%s query_chars=%s latency_ms=%.2f",
+        result.mode,
+        len(result.hits),
+        len(query),
+        (time.perf_counter() - started) * 1000,
+    )
     return SearchServiceResponse(
         query=query,
         retrieval=retrieval_response_dict(result),

@@ -7,6 +7,7 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from sas94_search_api.app import add_retrieval_args, build_retrieval_config
+from sas94_search_api.logging_utils import configure_logging, get_logger
 from sas94_search_api.retrieval import env_default, load_dotenv, load_section_routes
 from sas94_search_api.search_service import config_cache_dict, run_search
 
@@ -17,6 +18,7 @@ _HTTP_RESPONSE_CACHE: OrderedDict[str, tuple[float, dict[str, object]]] = Ordere
 VALID_MODES = {"dense", "lexical", "hybrid"}
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
+LOGGER = get_logger(__name__)
 
 
 class RequestValidationError(ValueError):
@@ -187,6 +189,7 @@ def make_search_handler(server_args: argparse.Namespace):
 
 def serve_search_api() -> int:
     load_dotenv()
+    configure_logging()
     args = parse_search_api_args()
     preload_config = build_retrieval_config(args)
     load_section_routes(
@@ -195,7 +198,7 @@ def serve_search_api() -> int:
         preload_config.corpus_path,
     )
     server = ThreadingHTTPServer((args.host, args.port), make_search_handler(args))
-    print(f"SAS search API listening on http://{args.host}:{args.port}", flush=True)
+    LOGGER.info("search_api_started host=%s port=%s default_mode=%s", args.host, args.port, args.mode)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
