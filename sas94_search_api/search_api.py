@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
+from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from sas94_search_api.app import add_retrieval_args, build_retrieval_config
 from sas94_search_api.retrieval import env_default, load_dotenv
 from sas94_search_api.search_service import run_search
+
+
+HTTP_CACHE_SIZE = int(env_default("RAG_SEARCH_HTTP_CACHE_SIZE", "128") or "128")
+HTTP_CACHE_TTL_SECONDS = int(env_default("RAG_SEARCH_HTTP_CACHE_TTL", "30") or "30")
+_HTTP_RESPONSE_CACHE: OrderedDict[str, tuple[float, dict[str, object]]] = OrderedDict()
 
 
 def parse_search_api_args() -> argparse.Namespace:
@@ -33,6 +40,54 @@ def build_search_config_from_request(server_args: argparse.Namespace, payload: d
     config.dense_limit = max(args.top_k * 4, server_args.dense_limit)
     config.lexical_limit = max(args.top_k * 4, server_args.lexical_limit)
     return config
+
+
+def cache_key_for_request(query: str, config) -> str:
+    return json.dumps(
+        {
+            "query": query,
+            "collection": config.collection,
+            "qdrant_url": config.qdrant_url,
+            "embedding_model": config.embedding_model,
+            "corpus_path": config.corpus_path,
+            "fts_db_path": config.fts_db_path,
+            "top_k": config.top_k,
+            "dense_limit": config.dense_limit,
+            "lexical_limit": config.lexical_limit,
+            "docsets": list(config.docsets),
+            "section_kinds": list(config.section_kinds),
+            "enable_dense": config.enable_dense,
+            "enable_lexical": config.enable_lexical,
+            "enable_rerank": config.enable_rerank,
+            "enable_term_expansion": config.enable_term_expansion,
+            "rerank_model": config.rerank_model,
+            "rerank_limit": config.rerank_limit,
+            "dense_weight": config.dense_weight,
+            "lexical_weight": config.lexical_weight,
+            "rrf_k": config.rrf_k,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def get_cached_response(cache_key: str) -> dict[str, object] | None:
+    cached = _HTTP_RESPONSE_CACHE.get(cache_key)
+    if cached is None:
+        return None
+    expires_at, payload = cached
+    if expires_at < time.time():
+        _HTTP_RESPONSE_CACHE.pop(cache_key, None)
+        return None
+    _HTTP_RESPONSE_CACHE.move_to_end(cache_key)
+    return payload
+
+
+def set_cached_response(cache_key: str, payload: dict[str, object]) -> None:
+    _HTTP_RESPONSE_CACHE[cache_key] = (time.time() + HTTP_CACHE_TTL_SECONDS, payload)
+    _HTTP_RESPONSE_CACHE.move_to_end(cache_key)
+    while len(_HTTP_RESPONSE_CACHE) > HTTP_CACHE_SIZE:
+        _HTTP_RESPONSE_CACHE.popitem(last=False)
 
 
 def make_search_handler(server_args: argparse.Namespace):
@@ -71,12 +126,19 @@ def make_search_handler(server_args: argparse.Namespace):
 
             try:
                 config = build_search_config_from_request(server_args, payload)
+                cache_key = cache_key_for_request(query, config)
+                cached_payload = get_cached_response(cache_key)
+                if cached_payload is not None:
+                    self._send_json(cached_payload)
+                    return
                 search_response = run_search(query, config)
             except Exception as exc:
                 self._send_json({"error": str(exc)}, status=500)
                 return
 
-            self._send_json({"query": search_response.query, "retrieval": search_response.retrieval})
+            response_payload = {"query": search_response.query, "retrieval": search_response.retrieval}
+            set_cached_response(cache_key, response_payload)
+            self._send_json(response_payload)
 
         def log_message(self, format: str, *args) -> None:
             return

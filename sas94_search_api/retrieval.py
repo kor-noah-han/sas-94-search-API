@@ -35,6 +35,10 @@ EN_KO_PARTICLE_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*)(은|는|이|가|을|�
 _RERANKER_CACHE: dict[str, TextCrossEncoder] = {}
 _QDRANT_CLIENT_CACHE: OrderedDict[tuple[str | None, str, str | None, int | None], QdrantClient] = OrderedDict()
 QDRANT_CLIENT_CACHE_SIZE = 4
+LEXICAL_FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
+    "library": ("library", "libname", "libref", "assignment"),
+    "data step": ("data step", "data-step", "set statement", "merge statement", "data statement"),
+}
 
 
 @dataclass
@@ -514,11 +518,13 @@ def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk]) -> bool:
         return False
     top_hit = lexical_hits[0]
     base_query, expanded_terms = split_search_query(query)
+    section_path = str(top_hit.payload.get("section_path_text", "")).lower()
     searchable = " ".join(
         [
             str(top_hit.payload.get("title", "")).lower(),
-            str(top_hit.payload.get("section_path_text", "")).lower(),
+            section_path,
             str(top_hit.payload.get("chapter_title", "")).lower(),
+            str(top_hit.payload.get("text", "")).lower()[:1500],
         ]
     )
 
@@ -535,7 +541,19 @@ def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk]) -> bool:
         lowered = term.lower()
         if len(lowered) >= 6 and lowered in searchable:
             matched_expansions += 1
-    return matched_expansions >= 2
+    if matched_expansions >= 2:
+        return True
+
+    query_scope = f"{base_query.lower()} {' '.join(term.lower() for term in expanded_terms)}"
+    for family_terms in LEXICAL_FAMILY_MARKERS.values():
+        if not any(term in query_scope for term in family_terms):
+            continue
+        matches = sum(1 for term in family_terms if term in searchable)
+        if matches >= 2:
+            return True
+        if matches >= 1 and any(term in section_path for term in family_terms):
+            return True
+    return False
 
 
 def fuse_hits(
