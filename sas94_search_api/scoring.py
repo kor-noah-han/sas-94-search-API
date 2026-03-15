@@ -11,6 +11,7 @@ from sas94_search_api.retrieval_models import (
     RetrievalConfig,
     SectionRoute,
 )
+from sas94_search_api.taxonomy import detect_query_taxonomy
 from sas94_search_api.text_utils import extract_proc_names, split_search_query, tokenize
 
 
@@ -71,6 +72,9 @@ def reference_penalty(payload: dict[str, object]) -> float:
         "procedure concepts",
         "contents",
         "index",
+        "appendixes",
+        "dictionary",
+        "interfaces with the macro facility",
     ]
     for marker in low_signal_markers:
         if marker in combined:
@@ -93,7 +97,9 @@ def reference_penalty(payload: dict[str, object]) -> float:
 
 def lexical_post_score(query: str, base_score: float, payload: dict[str, object]) -> float:
     base_query, expanded_terms = split_search_query(query)
+    taxonomy = detect_query_taxonomy(query)
     query_tokens = tokenize(base_query)
+    docset = str(payload.get("docset", "")).lower()
     section_path = str(payload.get("section_path_text", "")).lower()
     title = str(payload.get("title", "")).lower()
     combined = f"{title} {section_path}"
@@ -109,6 +115,21 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
         elif token in title:
             score += 0.35
 
+    if docset and docset in taxonomy.preferred_docsets:
+        score += 0.95
+    elif taxonomy.preferred_docsets:
+        score -= 0.45
+    matched_section_markers = 0
+    for marker in taxonomy.preferred_section_markers[:18]:
+        if marker in section_path:
+            score += 0.45
+            matched_section_markers += 1
+        elif marker in title:
+            score += 0.22
+    for marker in taxonomy.discouraged_section_markers[:10]:
+        if marker in section_path:
+            score -= 0.35
+
     if "procedure" in section_path and "proc" in phrase:
         score += 0.5
     if "library" in phrase and "library" in section_path:
@@ -117,8 +138,10 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
         score += 0.75
     query_scope = f"{phrase} {' '.join(term.lower() for term in expanded_terms)}"
     if any(marker in query_scope for marker in HOWTO_QUERY_MARKERS):
-        if any(marker in section_path for marker in HOWTO_SECTION_MARKERS):
-            score += 0.9
+        if any(marker in section_path for marker in ("syntax", "usage", "statement", "getting started", "elements of", "procedure")):
+            score += 1.1
+        elif any(marker in section_path for marker in ("example", "examples", "overview")):
+            score += 0.35
         if any(marker in section_path for marker in DEFINITION_SECTION_MARKERS):
             score -= 0.6
     if ("library" in query_scope or "libname" in query_scope) and ("할당" in query_scope or "assign" in query_scope):
@@ -129,10 +152,41 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
             score += 1.2
         if any(marker in title for marker in GRAPHICS_SECTION_MARKERS):
             score += 0.8
+    if "graphics" in taxonomy.families and docset in {"statug", "imlug"}:
+        score += 0.75
+    if "macro" in taxonomy.families and docset == "mcrolref":
+        score += 0.85
+    if any(family in taxonomy.families for family in {"library", "data_step"}) and docset == "lepg":
+        score += 0.85
+    if any(family in taxonomy.families for family in {"statistics", "correlation", "modeling"}) and docset in {"procstat", "statug"}:
+        score += 0.85
+    if "library" in taxonomy.families and docset != "lepg":
+        score -= 0.9
+        if section_path.startswith("procedures >"):
+            score -= 1.4
+            if "library" not in section_path:
+                score -= 1.0
+        if docset == "proc":
+            score -= 1.5
+    if "library" in taxonomy.families:
+        if "sas libraries" in section_path:
+            score += 1.0
+        if "elements of a library assignment" in section_path:
+            score += 2.6
+    if "macro" in taxonomy.families and docset != "mcrolref":
+        score -= 0.9
+    if "graphics" in taxonomy.families and docset not in {"statug", "imlug"}:
+        score -= 0.8
+    if any(family in taxonomy.families for family in {"statistics", "correlation", "modeling"}) and docset not in {"procstat", "statug"}:
+        score -= 0.6
+    if matched_section_markers >= 2:
+        score += 0.5
     for term in expanded_terms[:8]:
         lowered = term.lower()
         if lowered in combined:
             score += 0.8 if "procedure" in lowered else 0.4
+        if lowered in section_path or lowered in title:
+            score += 0.9 if any(key in lowered for key in ("procedure", "statement", "libname", "graphics")) else 0.45
     score += procedure_bonus(query, payload)
     score -= reference_penalty(payload)
     return score
@@ -161,8 +215,10 @@ def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk], routes: li
     if not lexical_hits:
         return False
     top_hit = lexical_hits[0]
+    taxonomy = detect_query_taxonomy(query)
     base_query, expanded_terms = split_search_query(query)
     section_path = str(top_hit.payload.get("section_path_text", "")).lower()
+    docset = str(top_hit.payload.get("docset", "")).lower()
     searchable = " ".join(
         [
             str(top_hit.payload.get("title", "")).lower(),
@@ -190,6 +246,11 @@ def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk], routes: li
             matched_expansions += 1
     if matched_expansions >= 2:
         return True
+
+    if taxonomy.preferred_docsets and docset in taxonomy.preferred_docsets:
+        taxonomy_matches = sum(1 for marker in taxonomy.preferred_section_markers[:12] if marker in searchable)
+        if taxonomy_matches >= 2:
+            return True
 
     query_scope = f"{base_query.lower()} {' '.join(term.lower() for term in expanded_terms)}"
     for family_terms in LEXICAL_FAMILY_MARKERS.values():

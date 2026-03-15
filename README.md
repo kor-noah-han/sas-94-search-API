@@ -36,6 +36,8 @@ SAS 9.4 문서 검색 전용 API 저장소다. 이 저장소는 `retrieval-only`
 ├── README.md
 ├── pyproject.toml
 ├── requirements.txt
+├── docs/
+│   └── query-taxonomy.md
 ├── sas94_search_api/
 │   ├── __init__.py
 │   ├── app.py
@@ -48,6 +50,7 @@ SAS 9.4 문서 검색 전용 API 저장소다. 이 저장소는 `retrieval-only`
 │   ├── search_api.py
 │   ├── search_service.py
 │   ├── storage.py
+│   ├── taxonomy.py
 │   └── text_utils.py
 └── data/
     ├── config/
@@ -66,7 +69,7 @@ pip install .
 또는 다른 시스템에서 바로:
 
 ```bash
-pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@v0.1.3"
+pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@v0.1.4"
 ```
 
 설치 후 런타임 데이터 받기:
@@ -128,7 +131,7 @@ sas94-search-data --output-dir .
 특정 태그를 지정하려면:
 
 ```bash
-sas94-search-data --tag search-data-20260316-v0.1.3 --output-dir .
+sas94-search-data --tag search-data-20260316-v0.1.4 --output-dir .
 ```
 
 호출 예시:
@@ -158,8 +161,12 @@ curl -s -X POST http://127.0.0.1:8788/api/search \
   - Qdrant / SQLite FTS access
 - `scoring.py`
   - lexical/hybrid scoring rules
+- `taxonomy.py`
+  - query intent/family taxonomy and docset/section preferences
 - `rerank.py`
   - optional reranker integration
+
+taxonomy 기준은 [`docs/query-taxonomy.md`](/Users/noahhan/dev/sas-94-search-API/docs/query-taxonomy.md#L1) 에 정리했다.
 
 ## 주의
 
