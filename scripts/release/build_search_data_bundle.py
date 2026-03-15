@@ -10,11 +10,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-INCLUDE_PATHS = (
+BASE_INCLUDE_PATHS = (
     "data/config/sas-ko-en-terms.json",
     "data/processed/sas-rag/search/sas9-pdf-fts.db",
     "data/processed/sas-rag/search/sas9-pdf-route-index.json",
     "data/processed/sas-rag/corpus/sas9-pdf-corpus.jsonl",
+)
+
+LOCAL_QDRANT_INCLUDE_PATHS = (
     "data/qdrant/sas9_pdf/meta.json",
     "data/qdrant/sas9_pdf/collection/sas9_pdf_chunks/storage.sqlite",
 )
@@ -45,6 +48,11 @@ def parse_args() -> argparse.Namespace:
         default=datetime.now(timezone.utc).strftime("%Y%m%d"),
         help="Bundle version suffix.",
     )
+    parser.add_argument(
+        "--include-local-qdrant",
+        action="store_true",
+        help="Include local Qdrant files in the bundle. Off by default because corpus/FTS/route are sufficient for lexical-first runtime.",
+    )
     return parser.parse_args()
 
 
@@ -63,7 +71,11 @@ def main() -> int:
     manifest_files: list[dict[str, object]] = []
     total_bytes = 0
 
-    for relative_str in INCLUDE_PATHS:
+    include_paths = list(BASE_INCLUDE_PATHS)
+    if args.include_local_qdrant:
+        include_paths.extend(LOCAL_QDRANT_INCLUDE_PATHS)
+
+    for relative_str in include_paths:
         relative_path = Path(relative_str)
         source_path = source_root / relative_path
         if not source_path.exists():
@@ -106,6 +118,7 @@ def main() -> int:
             "checksum_file": str(checksum_path),
             "total_bytes": total_bytes,
             "archive_sha256": archive_sha,
+            "included_local_qdrant": bool(args.include_local_qdrant),
         },
         ensure_ascii=False,
         indent=2,
