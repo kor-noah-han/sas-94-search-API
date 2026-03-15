@@ -59,7 +59,7 @@ pip install .
 또는 다른 시스템에서 바로:
 
 ```bash
-pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@main"
+pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@76ef338"
 ```
 
 설치 후 런타임 데이터 받기:
