@@ -66,6 +66,15 @@ class RetrievalResult:
 
 
 @dataclass
+class SectionRoute:
+    docset: str
+    section_path_text: str
+    chapter_title: str | None
+    section_title: str | None
+    score: float
+
+
+@dataclass
 class RetrievalConfig:
     collection: str = DEFAULT_COLLECTION
     qdrant_path: str = DEFAULT_QDRANT_PATH
@@ -259,6 +268,73 @@ def corpus_rows(path: Path) -> Iterable[dict[str, object]]:
                 yield json.loads(line)
 
 
+@lru_cache(maxsize=2)
+def load_section_routes(fts_db_path_str: str, corpus_path_str: str) -> list[dict[str, object]]:
+    db_path = Path(fts_db_path_str)
+    if db_path.exists():
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """
+                SELECT docset, title, section_path_text
+                FROM chunks_meta
+                GROUP BY docset, title, section_path_text
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+
+        routes: list[dict[str, object]] = []
+        for row in rows:
+            docset = str(row["docset"] or "")
+            section_path_text = str(row["section_path_text"] or "").strip()
+            title = str(row["title"] or "").strip()
+            if not docset or not section_path_text:
+                continue
+            routes.append(
+                {
+                    "docset": docset,
+                    "section_path_text": section_path_text,
+                    "chapter_title": None,
+                    "section_title": None,
+                    "search_text": "\n".join(part for part in [title, section_path_text] if part).lower(),
+                }
+            )
+        return routes
+
+    path = Path(corpus_path_str)
+    if not path.exists():
+        return []
+
+    grouped: OrderedDict[tuple[str, str], dict[str, object]] = OrderedDict()
+    for row in corpus_rows(path):
+        docset = str(row.get("docset") or row.get("doc_id") or "")
+        section_path_text = str(row.get("section_path_text") or "").strip()
+        if not docset or not section_path_text:
+            continue
+        key = (docset, section_path_text)
+        if key in grouped:
+            continue
+        grouped[key] = {
+            "docset": docset,
+            "section_path_text": section_path_text,
+            "chapter_title": row.get("chapter_title"),
+            "section_title": row.get("section_title"),
+            "search_text": "\n".join(
+                part
+                for part in [
+                    str(row.get("title") or ""),
+                    section_path_text,
+                    str(row.get("chapter_title") or ""),
+                    str(row.get("section_title") or ""),
+                ]
+                if part
+            ).lower(),
+        }
+    return list(grouped.values())
+
+
 def score_corpus_row(query_tokens: list[str], row: dict[str, object]) -> float:
     haystack = " ".join(
         [
@@ -280,6 +356,73 @@ def score_corpus_row(query_tokens: list[str], row: dict[str, object]) -> float:
             if token in str(row.get("title", "")).lower():
                 score += 0.1
     return score
+
+
+def score_section_route(query: str, route: dict[str, object]) -> float:
+    base_query, expanded_terms = split_search_query(query)
+    query_tokens = tokenize(base_query)
+    searchable = str(route["search_text"])
+    section_path_text = str(route["section_path_text"]).lower()
+    chapter_title = str(route.get("chapter_title") or "").lower()
+    score = 0.0
+
+    phrase = base_query.lower().strip().replace("?", "")
+    if phrase and phrase in section_path_text:
+        score += 3.0
+
+    for token in query_tokens:
+        if token in section_path_text:
+            score += 0.7
+        elif token in chapter_title:
+            score += 0.25
+        elif token in searchable:
+            score += 0.12
+
+    for term in expanded_terms[:8]:
+        lowered = term.lower()
+        if lowered in section_path_text:
+            score += 1.0 if "procedure" in lowered else 0.5
+        elif lowered in searchable:
+            score += 0.25
+
+    proc_names = extract_proc_names(f"{base_query} {' '.join(expanded_terms)}")
+    for proc_name in proc_names:
+        if f"{proc_name} procedure" in searchable:
+            score += 2.2
+        if f"proc {proc_name}" in searchable:
+            score += 2.2
+
+    query_scope = f"{base_query.lower()} {' '.join(term.lower() for term in expanded_terms)}"
+    for family_terms in LEXICAL_FAMILY_MARKERS.values():
+        if any(term in query_scope for term in family_terms):
+            score += sum(0.25 for term in family_terms if term in searchable)
+
+    return score
+
+
+def rank_section_routes(query: str, config: RetrievalConfig, limit: int = 8) -> list[SectionRoute]:
+    routes = load_section_routes(config.fts_db_path, config.corpus_path)
+    if not routes:
+        return []
+
+    scored: list[SectionRoute] = []
+    for route in routes:
+        if config.docsets and route["docset"] not in set(config.docsets):
+            continue
+        score = score_section_route(query, route)
+        if score <= 0:
+            continue
+        scored.append(
+            SectionRoute(
+                docset=str(route["docset"]),
+                section_path_text=str(route["section_path_text"]),
+                chapter_title=str(route.get("chapter_title") or "") or None,
+                section_title=str(route.get("section_title") or "") or None,
+                score=score,
+            )
+        )
+    scored.sort(key=lambda item: item.score, reverse=True)
+    return scored[:limit]
 
 
 def retrieve_corpus_scan(query_text: str, config: RetrievalConfig) -> list[RetrievedChunk]:
@@ -513,7 +656,26 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
     return score
 
 
-def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk]) -> bool:
+def route_bonus(payload: dict[str, object], routes: list[SectionRoute]) -> float:
+    if not routes:
+        return 0.0
+    section_path = str(payload.get("section_path_text", "")).lower()
+    chapter_title = str(payload.get("chapter_title", "")).lower()
+    bonus = 0.0
+    for index, route in enumerate(routes[:3], start=1):
+        weight = max(0.6 - (index - 1) * 0.18, 0.2)
+        route_path = route.section_path_text.lower()
+        route_chapter = (route.chapter_title or "").lower()
+        if section_path == route_path:
+            bonus += weight
+        elif route_path and section_path.startswith(route_path):
+            bonus += weight * 0.7
+        elif route_chapter and chapter_title and route_chapter == chapter_title:
+            bonus += weight * 0.35
+    return bonus
+
+
+def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk], routes: list[SectionRoute]) -> bool:
     if not lexical_hits:
         return False
     top_hit = lexical_hits[0]
@@ -530,6 +692,9 @@ def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk]) -> bool:
 
     proc_names = extract_proc_names(f"{base_query} {' '.join(expanded_terms)}")
     if proc_names and any(f"{proc} procedure" in searchable for proc in proc_names):
+        return True
+
+    if routes and routes[0].score >= 2.5 and route_bonus(top_hit.payload, routes[:1]) >= 0.5:
         return True
 
     phrase = base_query.lower().strip().replace("?", "")
@@ -561,6 +726,7 @@ def fuse_hits(
     dense_hits: list[RetrievedChunk],
     lexical_hits: list[RetrievedChunk],
     config: RetrievalConfig,
+    routes: list[SectionRoute],
 ) -> list[RetrievedChunk]:
     query_tokens = tokenize(query)
     merged: dict[str, RetrievedChunk] = {}
@@ -593,6 +759,7 @@ def fuse_hits(
         score += metadata_bonus(query_tokens, hit.payload)
         score += procedure_bonus(query, hit.payload) * 0.08
         score -= reference_penalty(hit.payload) * 0.05
+        score += route_bonus(hit.payload, routes)
         hit.fused_score = score
         fused.append(hit)
 
@@ -668,10 +835,19 @@ def retrieve_hybrid(query: str, config: RetrievalConfig) -> RetrievalResult:
     query = normalize_query_text(query)
     query_text, expanded_terms = expand_query(query, config)
 
+    started = time.perf_counter()
+    routes = rank_section_routes(query_text, config)
+    timings_ms["route"] = (time.perf_counter() - started) * 1000
+
     if config.enable_lexical:
         started = time.perf_counter()
         try:
             lexical_hits = retrieve_lexical(query_text, config)
+            for hit in lexical_hits:
+                hit.score += route_bonus(hit.payload, routes)
+            lexical_hits.sort(key=lambda item: item.score, reverse=True)
+            for rank, hit in enumerate(lexical_hits, start=1):
+                hit.lexical_rank = rank
         except Exception as exc:
             lexical_error = str(exc)
         timings_ms["lexical"] = (time.perf_counter() - started) * 1000
@@ -679,13 +855,16 @@ def retrieve_hybrid(query: str, config: RetrievalConfig) -> RetrievalResult:
     skip_dense = (
         config.enable_dense
         and config.enable_lexical
-        and should_skip_dense(query_text, lexical_hits)
+        and should_skip_dense(query_text, lexical_hits, routes)
     )
 
     if config.enable_dense and not skip_dense:
         started = time.perf_counter()
         try:
             dense_hits = retrieve_dense(query_text, config)
+            for hit in dense_hits:
+                hit.score += route_bonus(hit.payload, routes)
+            dense_hits.sort(key=lambda item: item.score, reverse=True)
         except Exception as exc:
             dense_error = str(exc)
         timings_ms["dense"] = (time.perf_counter() - started) * 1000
@@ -695,7 +874,7 @@ def retrieve_hybrid(query: str, config: RetrievalConfig) -> RetrievalResult:
     # Prefer hybrid whenever both search paths return data; otherwise degrade
     # gracefully to whichever index is currently available.
     if dense_hits and lexical_hits:
-        hits = fuse_hits(query, dense_hits, lexical_hits, config)
+        hits = fuse_hits(query, dense_hits, lexical_hits, config, routes)
         mode = "hybrid"
     elif dense_hits:
         hits = dense_hits
