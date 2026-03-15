@@ -17,6 +17,7 @@ DEFAULT_TERM_DICTIONARY = "data/config/sas-ko-en-terms.json"
 LEXICAL_FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
     "library": ("library", "libname", "libref", "assignment"),
     "data step": ("data step", "data-step", "set statement", "merge statement", "data statement"),
+    "graphics": ("graphics", "graph", "plot", "sgplot", "ods graphics", "statistical graphics"),
 }
 HOWTO_QUERY_MARKERS = (
     "how",
@@ -51,6 +52,15 @@ LIBRARY_ASSIGNMENT_MARKERS = (
     "assignment",
     "elements of a library assignment",
     "libname",
+)
+GRAPHICS_SECTION_MARKERS = (
+    "statistical graphics",
+    "ods graphics",
+    "graphics template",
+    "boxplot",
+    "scatter",
+    "histogram",
+    "plot",
 )
 
 

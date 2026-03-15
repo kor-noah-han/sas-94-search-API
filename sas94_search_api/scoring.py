@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sas94_search_api.retrieval_models import (
     DEFINITION_SECTION_MARKERS,
+    GRAPHICS_SECTION_MARKERS,
     HOWTO_QUERY_MARKERS,
     HOWTO_SECTION_MARKERS,
     LEXICAL_FAMILY_MARKERS,
@@ -123,6 +124,11 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
     if ("library" in query_scope or "libname" in query_scope) and ("할당" in query_scope or "assign" in query_scope):
         if any(marker in section_path for marker in LIBRARY_ASSIGNMENT_MARKERS):
             score += 1.1
+    if any(marker in query_scope for marker in ("graphics", "graph", "plot", "sgplot", "ods graphics", "statistical graphics")):
+        if any(marker in section_path for marker in GRAPHICS_SECTION_MARKERS):
+            score += 1.2
+        if any(marker in title for marker in GRAPHICS_SECTION_MARKERS):
+            score += 0.8
     for term in expanded_terms[:8]:
         lowered = term.lower()
         if lowered in combined:
