@@ -179,6 +179,69 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
         score -= 0.8
     if any(family in taxonomy.families for family in {"statistics", "correlation", "modeling"}) and docset not in {"procstat", "statug"}:
         score -= 0.6
+
+    if "sql" in taxonomy.families:
+        if docset == "proc":
+            score += 1.25
+        else:
+            score -= 1.3
+        if "sql procedure" in section_path:
+            score += 2.1
+        if "syntax: sql procedure" in section_path or "example: using the sql procedure" in section_path:
+            score += 1.5
+        if "fedsql procedure" in section_path and "fedsql" not in query_scope:
+            score -= 1.2
+        if any(marker in section_path for marker in ("combining data", "match-merge", "merge data")):
+            score -= 2.0
+
+    if "where_filtering" in taxonomy.families:
+        if docset == "lepg":
+            score += 1.2
+        else:
+            score -= 1.1
+        if "where expressions" in section_path:
+            score += 2.0
+        if "where expression processing" in section_path:
+            score += 1.5
+        if "syntax of where expression" in section_path or "where to use a where expression" in section_path:
+            score += 1.15
+        if "subsetting if statement" in section_path:
+            score += 0.5
+
+    if "missing_values" in taxonomy.families:
+        if docset == "lepg":
+            score += 1.2
+        else:
+            score -= 1.0
+        if "missing values" in section_path:
+            score += 2.2
+        if "special missing values" in section_path:
+            score += 1.4
+
+    if "macro_definition" in taxonomy.families:
+        if docset == "mcrolref":
+            score += 1.0
+        else:
+            score -= 1.0
+        if "macro variables defined by users" in section_path:
+            score += 2.0
+        if "%let statement" in section_path or "%let" in combined:
+            score += 1.35
+        if "automatic macro variables" in section_path:
+            score -= 1.8
+
+    if "formats" in taxonomy.families:
+        if docset == "proc":
+            score += 1.0
+        if "syntax: format procedure" in section_path or "usage: format procedure" in section_path:
+            score += 1.6
+        if "format statement" in combined:
+            score += 1.0
+        if "concepts: format procedure" in section_path and any(marker in query_scope for marker in HOWTO_QUERY_MARKERS):
+            score -= 1.0
+        if "results: format procedure" in section_path:
+            score -= 0.45
+
     if matched_section_markers >= 2:
         score += 0.5
     for term in expanded_terms[:8]:
@@ -261,6 +324,18 @@ def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk], routes: li
             return True
         if matches >= 1 and any(term in section_path for term in family_terms):
             return True
+    if "sql" in taxonomy.families and docset == "proc" and "sql procedure" in section_path:
+        return True
+    if "where_filtering" in taxonomy.families and docset == "lepg" and "where expression" in section_path:
+        return True
+    if "missing_values" in taxonomy.families and docset == "lepg" and "missing values" in section_path:
+        return True
+    if "macro_definition" in taxonomy.families and docset == "mcrolref" and (
+        "macro variables defined by users" in section_path or "%let" in searchable
+    ):
+        return True
+    if "formats" in taxonomy.families and docset == "proc" and "format procedure" in section_path:
+        return True
     return False
 
 

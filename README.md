@@ -69,7 +69,7 @@ pip install .
 또는 다른 시스템에서 바로:
 
 ```bash
-pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@v0.1.4"
+pip install "sas-94-search-api @ git+https://github.com/kor-noah-han/sas-94-search-API.git@v0.1.5"
 ```
 
 설치 후 런타임 데이터 받기:
@@ -131,7 +131,7 @@ sas94-search-data --output-dir .
 특정 태그를 지정하려면:
 
 ```bash
-sas94-search-data --tag search-data-20260316-v0.1.4 --output-dir .
+sas94-search-data --tag search-data-20260316-v0.1.5 --output-dir .
 ```
 
 호출 예시:

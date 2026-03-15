@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sas-94-search-api"
-version = "0.1.4"
+version = "0.1.5"
 description = "Retrieval-only SAS 9.4 search API and Python package."
 readme = "README.md"
 requires-python = ">=3.10"

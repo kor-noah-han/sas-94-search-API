@@ -48,7 +48,13 @@
 - `modeling`
   - preferred docset: `procstat`, `statug`
 - `sql`
-  - preferred docset: `proc`, `lepg`
+  - preferred docset: `proc`
+- `where_filtering`
+  - preferred docset: `lepg`
+- `missing_values`
+  - preferred docset: `lepg`
+- `macro_definition`
+  - preferred docset: `mcrolref`
 - `reporting`
   - preferred docset: `proc`
 - `import_export`
@@ -67,7 +73,7 @@
 - preferred docset이면 가산점
 - preferred section marker가 title/section path에 있으면 가산점
 - `howto`인데 `definition/introduction` 성격이면 감점
-- `graphics`, `macro`, `library`, `data_step`, `statistics` 계열은 family별 docset bonus 추가
+- `graphics`, `macro`, `library`, `data_step`, `statistics`, `sql`, `where_filtering`, `missing_values`, `macro_definition` 계열은 family별 docset bonus 추가
 - taxonomy marker가 충분히 맞으면 dense를 생략하고 lexical만으로 종료할 수 있음
 
 ## Goal
