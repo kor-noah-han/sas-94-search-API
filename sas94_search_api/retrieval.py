@@ -6,6 +6,7 @@ import re
 import sqlite3
 import time
 import warnings
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -32,6 +33,8 @@ HANGUL_RE = re.compile(r"[가-힣]")
 PROC_RE = re.compile(r"\bproc\s+([a-z0-9_]+)\b", re.IGNORECASE)
 EN_KO_PARTICLE_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*)(은|는|이|가|을|를|와|과|도|로|으로|에|에서|의)\b")
 _RERANKER_CACHE: dict[str, TextCrossEncoder] = {}
+_QDRANT_CLIENT_CACHE: OrderedDict[tuple[str | None, str, str | None, int | None], QdrantClient] = OrderedDict()
+QDRANT_CLIENT_CACHE_SIZE = 4
 
 
 @dataclass
@@ -70,8 +73,8 @@ class RetrievalConfig:
     fts_db_path: str = DEFAULT_FTS_DB_PATH
     term_dictionary_path: str = DEFAULT_TERM_DICTIONARY
     top_k: int = 5
-    dense_limit: int = 24
-    lexical_limit: int = 24
+    dense_limit: int = 12
+    lexical_limit: int = 16
     docsets: tuple[str, ...] = ()
     section_kinds: tuple[str, ...] = ()
     enable_dense: bool = True
@@ -79,7 +82,7 @@ class RetrievalConfig:
     enable_rerank: bool = True
     enable_term_expansion: bool = True
     rerank_model: str = DEFAULT_RERANK_MODEL
-    rerank_limit: int = 12
+    rerank_limit: int = 8
     dense_weight: float = 0.8
     lexical_weight: float = 1.2
     rrf_k: int = 60
@@ -102,6 +105,15 @@ def env_default(name: str, default: str | None = None) -> str | None:
 
 def normalize_query_text(text: str) -> str:
     return EN_KO_PARTICLE_RE.sub(r"\1", text)
+
+
+def split_search_query(query_text: str) -> tuple[str, list[str]]:
+    marker = "\nSAS search terms:"
+    if marker not in query_text:
+        return query_text.strip(), []
+    base, _, tail = query_text.partition(marker)
+    terms = [part.strip() for part in tail.split(",") if part.strip()]
+    return base.strip(), terms
 
 
 def tokenize(text: str) -> list[str]:
@@ -182,15 +194,27 @@ def build_qdrant_filter(config: RetrievalConfig) -> models.Filter | None:
 
 
 def build_qdrant_client(config: RetrievalConfig) -> QdrantClient:
+    cache_key = (config.qdrant_url, config.qdrant_path, config.qdrant_api_key, config.qdrant_timeout)
+    cached = _QDRANT_CLIENT_CACHE.get(cache_key)
+    if cached is not None:
+        _QDRANT_CLIENT_CACHE.move_to_end(cache_key)
+        return cached
+
     if config.qdrant_url:
-        return QdrantClient(
+        client = QdrantClient(
             url=config.qdrant_url,
             api_key=config.qdrant_api_key,
             timeout=config.qdrant_timeout,
         )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        return QdrantClient(path=config.qdrant_path, timeout=config.qdrant_timeout)
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            client = QdrantClient(path=config.qdrant_path, timeout=config.qdrant_timeout)
+
+    _QDRANT_CLIENT_CACHE[cache_key] = client
+    if len(_QDRANT_CLIENT_CACHE) > QDRANT_CLIENT_CACHE_SIZE:
+        _QDRANT_CLIENT_CACHE.popitem(last=False)
+    return client
 
 
 def retrieve_dense(query_text: str, config: RetrievalConfig) -> list[RetrievedChunk]:
@@ -286,15 +310,25 @@ def retrieve_corpus_scan(query_text: str, config: RetrievalConfig) -> list[Retri
 
 def build_fts_match_query(query_text: str) -> str:
     query_text = normalize_query_text(query_text)
-    tokens = tokenize(query_text)
+    base_query, expanded_terms = split_search_query(query_text)
+    tokens = tokenize(base_query)
     if not tokens:
         return ""
 
     parts: list[str] = []
     # Try a short phrase match first, then back off to token-level OR matching.
-    phrase = query_text.strip().replace('"', " ").strip()
+    phrase = base_query.strip().replace('"', " ").strip()
     if " " in phrase and len(phrase) <= 120:
         parts.append(f'"{phrase}"')
+
+    for term in expanded_terms[:8]:
+        normalized = normalize_query_text(term).replace('"', " ").strip()
+        if not normalized:
+            continue
+        if " " in normalized:
+            parts.append(f'"{normalized}"')
+        else:
+            parts.append(f'"{normalized.lower()}"')
 
     seen: set[str] = set()
     for token in tokens[:12]:
@@ -441,13 +475,14 @@ def reference_penalty(payload: dict[str, object]) -> float:
 
 
 def lexical_post_score(query: str, base_score: float, payload: dict[str, object]) -> float:
-    query_tokens = tokenize(query)
+    base_query, expanded_terms = split_search_query(query)
+    query_tokens = tokenize(base_query)
     section_path = str(payload.get("section_path_text", "")).lower()
     title = str(payload.get("title", "")).lower()
     combined = f"{title} {section_path}"
     score = base_score
 
-    phrase = query.lower().strip().replace("?", "")
+    phrase = base_query.lower().strip().replace("?", "")
     if phrase and phrase in combined:
         score += 2.0
 
@@ -465,9 +500,42 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
         score += 0.75
     if "macro" in phrase and "macro" in section_path:
         score += 0.75
+    for term in expanded_terms[:8]:
+        lowered = term.lower()
+        if lowered in combined:
+            score += 0.8 if "procedure" in lowered else 0.4
     score += procedure_bonus(query, payload)
     score -= reference_penalty(payload)
     return score
+
+
+def should_skip_dense(query: str, lexical_hits: list[RetrievedChunk]) -> bool:
+    if not lexical_hits:
+        return False
+    top_hit = lexical_hits[0]
+    base_query, expanded_terms = split_search_query(query)
+    searchable = " ".join(
+        [
+            str(top_hit.payload.get("title", "")).lower(),
+            str(top_hit.payload.get("section_path_text", "")).lower(),
+            str(top_hit.payload.get("chapter_title", "")).lower(),
+        ]
+    )
+
+    proc_names = extract_proc_names(f"{base_query} {' '.join(expanded_terms)}")
+    if proc_names and any(f"{proc} procedure" in searchable for proc in proc_names):
+        return True
+
+    phrase = base_query.lower().strip().replace("?", "")
+    if phrase and len(phrase.split()) >= 2 and phrase in searchable:
+        return True
+
+    matched_expansions = 0
+    for term in expanded_terms[:8]:
+        lowered = term.lower()
+        if len(lowered) >= 6 and lowered in searchable:
+            matched_expansions += 1
+    return matched_expansions >= 2
 
 
 def fuse_hits(
@@ -582,14 +650,6 @@ def retrieve_hybrid(query: str, config: RetrievalConfig) -> RetrievalResult:
     query = normalize_query_text(query)
     query_text, expanded_terms = expand_query(query, config)
 
-    if config.enable_dense:
-        started = time.perf_counter()
-        try:
-            dense_hits = retrieve_dense(query_text, config)
-        except Exception as exc:
-            dense_error = str(exc)
-        timings_ms["dense"] = (time.perf_counter() - started) * 1000
-
     if config.enable_lexical:
         started = time.perf_counter()
         try:
@@ -597,6 +657,22 @@ def retrieve_hybrid(query: str, config: RetrievalConfig) -> RetrievalResult:
         except Exception as exc:
             lexical_error = str(exc)
         timings_ms["lexical"] = (time.perf_counter() - started) * 1000
+
+    skip_dense = (
+        config.enable_dense
+        and config.enable_lexical
+        and should_skip_dense(query_text, lexical_hits)
+    )
+
+    if config.enable_dense and not skip_dense:
+        started = time.perf_counter()
+        try:
+            dense_hits = retrieve_dense(query_text, config)
+        except Exception as exc:
+            dense_error = str(exc)
+        timings_ms["dense"] = (time.perf_counter() - started) * 1000
+    elif config.enable_dense:
+        timings_ms["dense"] = 0.0
 
     # Prefer hybrid whenever both search paths return data; otherwise degrade
     # gracefully to whichever index is currently available.
