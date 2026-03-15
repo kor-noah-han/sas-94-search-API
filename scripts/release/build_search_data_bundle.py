@@ -13,6 +13,7 @@ from pathlib import Path
 INCLUDE_PATHS = (
     "data/config/sas-ko-en-terms.json",
     "data/processed/sas-rag/search/sas9-pdf-fts.db",
+    "data/processed/sas-rag/search/sas9-pdf-route-index.json",
     "data/processed/sas-rag/corpus/sas9-pdf-corpus.jsonl",
     "data/qdrant/sas9_pdf/meta.json",
     "data/qdrant/sas9_pdf/collection/sas9_pdf_chunks/storage.sqlite",

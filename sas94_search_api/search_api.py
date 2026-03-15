@@ -7,7 +7,7 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from sas94_search_api.app import add_retrieval_args, build_retrieval_config
-from sas94_search_api.retrieval import env_default, load_dotenv
+from sas94_search_api.retrieval import env_default, load_dotenv, load_section_routes
 from sas94_search_api.search_service import run_search
 
 
@@ -149,6 +149,12 @@ def make_search_handler(server_args: argparse.Namespace):
 def serve_search_api() -> int:
     load_dotenv()
     args = parse_search_api_args()
+    preload_config = build_retrieval_config(args)
+    load_section_routes(
+        preload_config.route_index_path,
+        preload_config.fts_db_path,
+        preload_config.corpus_path,
+    )
     server = ThreadingHTTPServer((args.host, args.port), make_search_handler(args))
     print(f"SAS search API listening on http://{args.host}:{args.port}", flush=True)
     try:

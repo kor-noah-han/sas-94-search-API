@@ -24,6 +24,7 @@ ENV_PATH = Path(".env")
 DEFAULT_COLLECTION = "sas9_pdf_chunks"
 DEFAULT_CORPUS_PATH = "data/processed/sas-rag/corpus/sas9-pdf-corpus.jsonl"
 DEFAULT_FTS_DB_PATH = "data/processed/sas-rag/search/sas9-pdf-fts.db"
+DEFAULT_ROUTE_INDEX_PATH = "data/processed/sas-rag/search/sas9-pdf-route-index.json"
 DEFAULT_QDRANT_PATH = "data/qdrant/sas9_pdf"
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
@@ -39,6 +40,40 @@ LEXICAL_FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
     "library": ("library", "libname", "libref", "assignment"),
     "data step": ("data step", "data-step", "set statement", "merge statement", "data statement"),
 }
+HOWTO_QUERY_MARKERS = (
+    "how",
+    "how to",
+    "어떻게",
+    "방법",
+    "사용",
+    "쓰",
+    "구문",
+    "syntax",
+    "example",
+    "예제",
+    "statement",
+    "할당",
+)
+HOWTO_SECTION_MARKERS = (
+    "syntax",
+    "example",
+    "examples",
+    "usage",
+    "getting started",
+    "overview",
+    "statement",
+    "elements of",
+)
+DEFINITION_SECTION_MARKERS = (
+    "definitions",
+    "definition",
+    "terms to be familiar with",
+)
+LIBRARY_ASSIGNMENT_MARKERS = (
+    "assignment",
+    "elements of a library assignment",
+    "libname",
+)
 
 
 @dataclass
@@ -84,6 +119,7 @@ class RetrievalConfig:
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     corpus_path: str = DEFAULT_CORPUS_PATH
     fts_db_path: str = DEFAULT_FTS_DB_PATH
+    route_index_path: str = DEFAULT_ROUTE_INDEX_PATH
     term_dictionary_path: str = DEFAULT_TERM_DICTIONARY
     top_k: int = 5
     dense_limit: int = 12
@@ -269,7 +305,11 @@ def corpus_rows(path: Path) -> Iterable[dict[str, object]]:
 
 
 @lru_cache(maxsize=2)
-def load_section_routes(fts_db_path_str: str, corpus_path_str: str) -> list[dict[str, object]]:
+def load_section_routes(route_index_path_str: str, fts_db_path_str: str, corpus_path_str: str) -> list[dict[str, object]]:
+    route_index_path = Path(route_index_path_str)
+    if route_index_path.exists():
+        return json.loads(route_index_path.read_text(encoding="utf-8"))
+
     db_path = Path(fts_db_path_str)
     if db_path.exists():
         conn = sqlite3.connect(str(db_path))
@@ -401,7 +441,7 @@ def score_section_route(query: str, route: dict[str, object]) -> float:
 
 
 def rank_section_routes(query: str, config: RetrievalConfig, limit: int = 8) -> list[SectionRoute]:
-    routes = load_section_routes(config.fts_db_path, config.corpus_path)
+    routes = load_section_routes(config.route_index_path, config.fts_db_path, config.corpus_path)
     if not routes:
         return []
 
@@ -647,6 +687,15 @@ def lexical_post_score(query: str, base_score: float, payload: dict[str, object]
         score += 0.75
     if "macro" in phrase and "macro" in section_path:
         score += 0.75
+    query_scope = f"{phrase} {' '.join(term.lower() for term in expanded_terms)}"
+    if any(marker in query_scope for marker in HOWTO_QUERY_MARKERS):
+        if any(marker in section_path for marker in HOWTO_SECTION_MARKERS):
+            score += 0.9
+        if any(marker in section_path for marker in DEFINITION_SECTION_MARKERS):
+            score -= 0.6
+    if ("library" in query_scope or "libname" in query_scope) and ("할당" in query_scope or "assign" in query_scope):
+        if any(marker in section_path for marker in LIBRARY_ASSIGNMENT_MARKERS):
+            score += 1.1
     for term in expanded_terms[:8]:
         lowered = term.lower()
         if lowered in combined:
